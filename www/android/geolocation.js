@@ -38,7 +38,8 @@ module.exports = {
             const geo = cordova.require('cordova/modulemapper').getOriginalSymbol(window, 'navigator.geolocation'); // eslint-disable-line no-undef
             geo.getCurrentPosition(success, error, args);
         };
-        const fail = function () {
+        const fail = function (e) {
+            console.log(e)
             if (error) {
                 error(new PositionError(PositionError.PERMISSION_DENIED, 'Illegal Access'));
             }
@@ -50,23 +51,32 @@ module.exports = {
     watchPosition: function (success, error, args) {
         const pluginWatchId = utils.createUUID();
 
-        const win = function (deviceApiLevel) {
+        const win = function (position) {
+            console.log(position)
+            console.log(JSON.parse(position))
             // Workaround for bug specific to API 31 where requesting `enableHighAccuracy: false` results in TIMEOUT error.
-            if (deviceApiLevel === 31) {
-                if (typeof args === 'undefined') args = {};
-                args.enableHighAccuracy = true;
-            }
-            const geo = cordova.require('cordova/modulemapper').getOriginalSymbol(window, 'navigator.geolocation'); // eslint-disable-line no-undef
-            pluginToNativeWatchMap[pluginWatchId] = geo.watchPosition(success, error, args);
+            // if (deviceApiLevel === 31) {
+            //     if (typeof args === 'undefined') args = {};
+            //     args.enableHighAccuracy = true;
+            // }
+
+            // const geo = cordova.require('cordova/modulemapper').getOriginalSymbol(window, 'navigator.geolocation'); // eslint-disable-line no-undef
+            // pluginToNativeWatchMap[pluginWatchId] = geo.watchPosition(success, error, args);
+            success(JSON.parse(position))
         };
 
-        const fail = function () {
-            if (error) {
-                error(new PositionError(PositionError.PERMISSION_DENIED, 'Illegal Access'));
-            }
+        const fail = function (e) {
+            console.log(e)
+            error(e)
+            // if (error) {
+            //     error(new PositionError(PositionError.PERMISSION_DENIED, 'Illegal Access'));
+            // }
         };
         const enableHighAccuracy = typeof args === 'object' && !!args.enableHighAccuracy;
-        exec(win, fail, 'Geolocation', 'getPermission', [enableHighAccuracy]);
+        console.log('checking permissions')
+        exec((r) => {console.log(r)}, (e)=>{console.log(e)}, 'Geolocation', 'getPermission', [enableHighAccuracy]);
+        console.log('watchPosition')
+        exec(win, fail, 'Geolocation', 'watchPosition', [])
 
         return pluginWatchId;
     },
