@@ -29,23 +29,37 @@ const pluginToNativeWatchMap = {};
 
 module.exports = {
     getCurrentPosition: function (success, error, args) {
-        const win = function (deviceApiLevel) {
+        const permissionWin = function (deviceApiLevel) {
             // Workaround for bug specific to API 31 where requesting `enableHighAccuracy: false` results in TIMEOUT error.
             if (deviceApiLevel === 31) {
                 if (typeof args === 'undefined') args = {};
                 args.enableHighAccuracy = true;
             }
-            const geo = cordova.require('cordova/modulemapper').getOriginalSymbol(window, 'navigator.geolocation'); // eslint-disable-line no-undef
-            geo.getCurrentPosition(success, error, args);
+            exec(positionWin, positionFail, 'Geolocation', 'getCurrentPosition', [])
         };
-        const fail = function (e) {
+        const permissionFail = function (e) {
             console.log(e)
             if (error) {
                 error(new PositionError(PositionError.PERMISSION_DENIED, 'Illegal Access'));
             }
         };
         const enableHighAccuracy = typeof args === 'object' && !!args.enableHighAccuracy;
-        exec(win, fail, 'Geolocation', 'getPermission', [enableHighAccuracy]);
+        exec(permissionWin, permissionFail, 'Geolocation', 'getPermission', [enableHighAccuracy]);
+
+
+
+        const positionWin = function (position) {
+            console.log(position)
+            console.log(JSON.parse(position))
+            success(JSON.parse(position))
+        };
+        const positionFail = function (e) {
+            console.error(e)
+            if (error) {
+                error(new PositionError(PositionError.PERMISSION_DENIED, 'Illegal Access'));
+            }
+        }
+
     },
 
     watchPosition: function (success, error, args) {
@@ -54,30 +68,18 @@ module.exports = {
         const win = function (position) {
             console.log(position)
             console.log(JSON.parse(position))
-            // Workaround for bug specific to API 31 where requesting `enableHighAccuracy: false` results in TIMEOUT error.
-            // if (deviceApiLevel === 31) {
-            //     if (typeof args === 'undefined') args = {};
-            //     args.enableHighAccuracy = true;
-            // }
-
-            // const geo = cordova.require('cordova/modulemapper').getOriginalSymbol(window, 'navigator.geolocation'); // eslint-disable-line no-undef
-            // pluginToNativeWatchMap[pluginWatchId] = geo.watchPosition(success, error, args);
             success(JSON.parse(position))
         };
 
         const fail = function (e) {
             console.log(e)
             error(e)
-            // if (error) {
-            //     error(new PositionError(PositionError.PERMISSION_DENIED, 'Illegal Access'));
-            // }
         };
         const enableHighAccuracy = typeof args === 'object' && !!args.enableHighAccuracy;
         console.log('checking permissions')
         exec((r) => {console.log(r)}, (e)=>{console.log(e)}, 'Geolocation', 'getPermission', [enableHighAccuracy]);
         console.log('watchPosition')
         exec(win, fail, 'Geolocation', 'watchPosition', [])
-
         return pluginWatchId;
     },
 

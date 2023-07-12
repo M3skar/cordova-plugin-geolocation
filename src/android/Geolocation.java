@@ -18,6 +18,7 @@
 
 package org.apache.cordova.geolocation;
 
+import android.app.job.JobScheduler;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.Manifest;
@@ -25,10 +26,11 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
-import androidx.core.app.ActivityCompat;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
@@ -38,6 +40,8 @@ import org.apache.cordova.LOG;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
+import java.util.function.Consumer;
 //import com.google.android.gms.location.LocationCallback;
 
 
@@ -51,7 +55,9 @@ public class Geolocation extends CordovaPlugin {
     String[] lowAccuracyPermissions = {Manifest.permission.ACCESS_COARSE_LOCATION};
     String[] permissionsToRequest;
     String[] permissionsToCheck;
-
+    static LocationListener gLocationListener = null;
+    static CallbackContext lastContext = null;
+//    static Handler locationUpdateHandler = null;
 
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
         LOG.d(TAG, "We are entering execute");
@@ -74,51 +80,44 @@ public class Geolocation extends CordovaPlugin {
                 PermissionHelper.requestPermissions(this, 0, permissionsToRequest);
             }
             return true;
+        } else if (action.equals("getCurrentPosition")) {
+
+            LocationManager lm = (LocationManager) this.webView.getContext().getSystemService(Context.LOCATION_SERVICE);
+            Location lastLocation = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+
+            JSONObject lastLocationJsonObject = locationToJson(lastLocation);
+            Log.i(TAG, "execute: lastlocation " + lastLocation.getAccuracy() + " _ " + lastLocation.toString());
+            callbackContext.success(lastLocationJsonObject.toString());
+            PluginResult r = new PluginResult(PluginResult.Status.ERROR, Build.VERSION.SDK_INT);
+            context.sendPluginResult(r);
+            return true;
+
         } else if (action.equals("watchPosition")) {
             LOG.d(TAG, "Executing watchPosition");
-//            FusedLocationProviderClient fusedLocationClient;
-//            fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
             try {
-                Log.i(TAG, "execute: 1");
+
                 LocationManager lm = (LocationManager) this.webView.getContext().getSystemService(Context.LOCATION_SERVICE);
-                Log.i(TAG, "execute: 2");
-                permissionsToCheck = highAccuracyPermissions;
-                Log.i(TAG, "execute: 3");
-                permissionsToRequest = Build.VERSION.SDK_INT <= 31 ? highAccuracyPermissions : permissionsToCheck;
-                if (hasPermisssion(permissionsToCheck)) {
-                    if (ActivityCompat.checkSelfPermission(this.webView.getContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this.webView.getContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                        // TODO: Consider calling
-                        //    ActivityCompat#requestPermissions
-                        // here to request the missing permissions, and then overriding
-                        //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                        //                                          int[] grantResults)
-                        // to handle the case where the user grants the permission. See the documentation
-                        // for ActivityCompat#requestPermissions for more details.
-//                        return false;
+                lastContext = callbackContext;
 
-                    }
+                if (gLocationListener != null) {
+                    lm.removeUpdates(gLocationListener);
                 }
-                Log.i(TAG, "execute: 4");
-//                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-//                    // TODO: Consider calling
-//                    //    ActivityCompat#requestPermissions
-//                    // here to request the missing permissions, and then overriding
-//                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-//                    //                                          int[] grantResults)
-//                    // to handle the case where the user grants the permission. See the documentation
-//                    // for ActivityCompat#requestPermissions for more details.
-////                    return TODO;
-//                }
 
-//                lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-                JSONObject lastLocationJsonObject = locationtoposition(lm.getLastKnownLocation(LocationManager.GPS_PROVIDER));
-                callbackContext.success(lastLocationJsonObject.toString());
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000, 0, new LocationListener() {
+                gLocationListener = new LocationListener() {
+
+                    @Override
+                    public void onStatusChanged(String provider, int status, android.os.Bundle extras) {
+                        Log.i(TAG, "onStatusChanged: provider " + provider + " status " + status);
+                    }
+
                     @Override
                     public void onLocationChanged(@NonNull Location location) {
-                       JSONObject positionJsonObject = locationtoposition(location);
-                        Log.i(TAG, "onLocationChanged: location.tostring " + positionJsonObject);
-                        callbackContext.success(positionJsonObject.toString());
+                        JSONObject positionJsonObject = locationToJson(location);
+                        Log.i(TAG, "onLocationChanged: location " + location.toString());
+
+                        PluginResult r = new PluginResult(PluginResult.Status.OK, positionJsonObject.toString());
+                        r.setKeepCallback(true);
+                        context.sendPluginResult(r);
                     }
 
                     @Override
@@ -130,9 +129,15 @@ public class Geolocation extends CordovaPlugin {
                     public void onProviderDisabled(@NonNull String provider) {
                         Log.i(TAG, "onProviderDisabled: provider " + provider);
                     }
-                });
-//                }
-                PluginResult r = new PluginResult(PluginResult.Status.OK, Build.VERSION.SDK_INT);
+                };
+
+                lm.requestLocationUpdates("fused", 1000, 0F, gLocationListener);
+
+                Location lastLocation = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                Log.i(TAG, "watch position, last location, " + lastLocation.toString());
+                JSONObject lastLocationJsonObject = locationToJson(lastLocation);
+
+                PluginResult r = new PluginResult(PluginResult.Status.OK, lastLocationJsonObject.toString());
                 r.setKeepCallback(true);
                 context.sendPluginResult(r);
                 return true;
@@ -142,25 +147,13 @@ public class Geolocation extends CordovaPlugin {
                 callbackContext.error(e.getMessage());
                 return false;
             }
-//            LocationCallback locationCallback = new LocationCallback() {
-//                @Override
-//                public void onLocationResult(LocationResult locationResult) {
-//                    if (locationResult == null) {
-//                        return;
-//                    }
-//                    for (Location location : locationResult.getLocations()) {
-//                        // Update UI with location data
-//                        // ...
-//                    }
-//                }
-//            };
-
 
         }
 
         return false;
     }
-    JSONObject locationtoposition (Location location) {
+
+    JSONObject locationToJson(Location location) {
         JSONObject coordsJsonObject = new JSONObject();
         try {
             coordsJsonObject.put("latitude", location.getLatitude());
