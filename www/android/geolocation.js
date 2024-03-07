@@ -67,7 +67,16 @@ module.exports = {
 
         const win = function (position) {
             console.log(position)
-            console.log(JSON.parse(position))
+            if (position === 'OK') {
+                return
+            }
+            try {
+                let positionJSON = JSON.parse(position)
+                console.log(JSON.parse(position))
+            } catch (e) {
+                console.log(e)
+                return
+            }
             success(JSON.parse(position))
         };
 
